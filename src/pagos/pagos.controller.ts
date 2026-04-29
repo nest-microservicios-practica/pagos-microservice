@@ -2,14 +2,15 @@ import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { PagosService } from './pagos.service';
 import { PagoSessionDto } from './dto/pago-session.dto';
 import { Request, Response } from 'express';
+import { MessagePattern } from '@nestjs/microservices';
 
 @Controller('pagos')
 export class PagosController {
   constructor(private readonly pagosService: PagosService) { }
 
   @Post('create-pago-session')
+  @MessagePattern('create.pago.session') // no se porque coloco puntos
   createPagoSession(@Body() pagoSessionDto: PagoSessionDto) {
-    // return pagoSessionDto;
     return this.pagosService.createPagoSession(pagoSessionDto);
   }
 

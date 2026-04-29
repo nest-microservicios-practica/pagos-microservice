@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { envs } from 'src/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { envs, NATS_SERVICE } from 'src/config';
 import { PagoSessionDto } from './dto/pago-session.dto';
 import { Request, Response } from 'express';
+import { ClientProxy } from '@nestjs/microservices';
 const stripe = require('stripe')(envs.stripeSecretKey);
 // fuente https://docs.stripe.com/sdks/server-side
 // url para listar mi endpoint de webhook en Stripe https://dashboard.stripe.com/webhooks
@@ -12,6 +13,12 @@ const stripe = require('stripe')(envs.stripeSecretKey);
 //! si sirve de algo , tripe ofrece la tarjeta 4242424242424 y asi sucesivamente para hacer pruebas de pagos exitosos, fallidos, etc, sin necesidad de usar una tarjeta real, lo cual es muy util para el desarrollo y testing de la aplicacion. https://stripe.com/docs/testing#cards
 @Injectable()
 export class PagosService {
+
+  private logger = new Logger('PagosService');
+
+  constructor( 
+    @Inject(NATS_SERVICE) private readonly cliente: ClientProxy
+   ) { }
 
     // este metodo se encarga de crear una session de pago en Stripe, es decir, crear un pago en Stripe y obtener la url de pago para redirigir al usuario a esa url y que pueda realizar el pago. tipo webpay transbank
     async createPagoSession(pagoSessionDto: PagoSessionDto) {
@@ -46,7 +53,12 @@ export class PagosService {
             success_url: envs.stripeSuccessUrl, // a donde se redirige al usuario despues de que el pago se realizo con exito
             cancel_url: envs.stripeCancelUrl, // a donde se redirige al usuario despues de que el pago se cancelo o no se realizo con exito
         });
-        return session;
+        // return session;
+        return {
+          cancelUrl: session.cancel_url,
+          successUrl: session.success_url,
+          url: session.url,
+        }
     }
 
 
@@ -75,15 +87,20 @@ export class PagosService {
     switch( event.type ) {
       case 'charge.succeeded': 
         const chargeSucceeded = event.data.object;
-        // TODO: llamar nuestro microservicio
-        console.log({
-          metadata: chargeSucceeded.metadata,
+        const payload = {
           pedidoId: chargeSucceeded.metadata.pedidoId,
-        });
+          stripePagoId: chargeSucceeded.id, // id del pago en Stripe, que puede ser util para futuras referencias o para hacer reembolsos, etc
+          reciboPagoURL: chargeSucceeded.receipt_url, // url del recibo de pago que genera Stripe
+        }
+        this.logger.log({ payload });
+
+        // emitimos un evento a NATS para que el microservicio de pedidos pueda escuchar ese evento y actualizar el estado del pedido a 'pagado' o algo similar  
+        // el emit no es bloqueante, asi que solo emite el evento y no espera ninguna respuesta, a diferencia del send que es bloqueante y espera una respuesta del microservicio que escucha
+        this.cliente.emit('pago.realizado', payload); 
       break;
       
       default:
-        console.log(`Event ${ event.type } not handled`);
+        this.logger.log(`Event ${ event.type } not handled`);
     }
 
     return res.status(200).json({ sig });
