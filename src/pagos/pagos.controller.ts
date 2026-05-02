@@ -1,8 +1,9 @@
 import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { MessagePattern } from '@nestjs/microservices';
+import { Request, Response } from 'express';
+
 import { PagosService } from './pagos.service';
 import { PagoSessionDto } from './dto/pago-session.dto';
-import { Request, Response } from 'express';
-import { MessagePattern } from '@nestjs/microservices';
 
 @Controller('pagos')
 export class PagosController {
