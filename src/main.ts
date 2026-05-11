@@ -10,7 +10,8 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 async function bootstrap() {
   const logger = new Logger('PagosMicroservice main');
   const app = await NestFactory.create(AppModule,{
-    rawBody: true
+    // esta opcion es para recibir el body de las peticiones de Stripe, que vienen en formato raw, y no en formato JSON
+    rawBody: true 
   });
   app.useGlobalPipes(
     new ValidationPipe({
